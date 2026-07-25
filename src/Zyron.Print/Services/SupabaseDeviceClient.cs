@@ -126,10 +126,9 @@ public sealed class SupabaseDeviceClient
         AppSettings settings, string accessToken, string function, object payload, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post,
-            $"{settings.SupabaseUrl.TrimEnd('/')}/rest/v1/rpc/{function}");
+            $"{settings.SupabaseUrl.TrimEnd('/')}/functions/v1/zyron-print-pair");
         request.Headers.Add("apikey", settings.SupabaseAnonKey);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        request.Content = JsonContent.Create(payload);
+        request.Content = JsonContent.Create(new { action = function, token = accessToken, payload });
         var response = await _http.SendAsync(request, cancellationToken);
         return (response, await response.Content.ReadAsStringAsync(cancellationToken));
     }
