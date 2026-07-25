@@ -55,7 +55,13 @@ public sealed class SupabaseDeviceClient
             throw new InvalidOperationException(ReadError(body, "O código não pôde ser pareado."));
         var result = JsonSerializer.Deserialize<PairingResponse>(body, JsonOptions)
                      ?? throw new InvalidOperationException("Resposta de pareamento inválida.");
-        return new PairingResult(result.DeviceId, result.RestaurantId, result.RestaurantName, result.AccessToken);
+        return new PairingResult(
+            result.DeviceId,
+            result.RestaurantId,
+            result.RestaurantName,
+            result.AccessToken,
+            result.RefreshToken,
+            result.ExpiresIn);
     }
 
     public async Task<PrintJob?> ClaimNextAsync(CancellationToken cancellationToken)
@@ -94,13 +100,18 @@ public sealed class SupabaseDeviceClient
     {
         var settings = RequireSettings();
         var credential = _credentials.Load() ?? throw new InvalidOperationException("Este computador ainda não está pareado.");
-        using var request = new HttpRequestMessage(HttpMethod.Post,
-            $"{settings.SupabaseUrl.TrimEnd('/')}/rest/v1/rpc/{function}");
-        request.Headers.Add("apikey", settings.SupabaseAnonKey);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credential.AccessToken);
-        request.Content = JsonContent.Create(payload);
-        using var response = await _http.SendAsync(request, cancellationToken);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (credential.ExpiresAt <= DateTimeOffset.UtcNow.AddMinutes(1))
+            credential = await RefreshSessionAsync(settings, credential, cancellationToken);
+
+        var (response, body) = await SendRpcAsync(settings, credential.AccessToken, function, payload, cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized && !string.IsNullOrWhiteSpace(credential.RefreshToken))
+        {
+            response.Dispose();
+            credential = await RefreshSessionAsync(settings, credential, cancellationToken);
+            (response, body) = await SendRpcAsync(settings, credential.AccessToken, function, payload, cancellationToken);
+        }
+        using (response)
+        {
         if (!response.IsSuccessStatusCode)
         {
             var message = ReadError(body, $"Falha ao chamar {function}.");
@@ -108,6 +119,44 @@ public sealed class SupabaseDeviceClient
             throw new InvalidOperationException(message);
         }
         return JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "null" : body);
+        }
+    }
+
+    private async Task<(HttpResponseMessage Response, string Body)> SendRpcAsync(
+        AppSettings settings, string accessToken, string function, object payload, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post,
+            $"{settings.SupabaseUrl.TrimEnd('/')}/rest/v1/rpc/{function}");
+        request.Headers.Add("apikey", settings.SupabaseAnonKey);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Content = JsonContent.Create(payload);
+        var response = await _http.SendAsync(request, cancellationToken);
+        return (response, await response.Content.ReadAsStringAsync(cancellationToken));
+    }
+
+    private async Task<DeviceCredential> RefreshSessionAsync(
+        AppSettings settings, DeviceCredential credential, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(credential.RefreshToken))
+            throw new InvalidOperationException("A sessão do computador expirou. Faça o pareamento novamente.");
+
+        using var request = new HttpRequestMessage(HttpMethod.Post,
+            $"{settings.SupabaseUrl.TrimEnd('/')}/auth/v1/token?grant_type=refresh_token");
+        request.Headers.Add("apikey", settings.SupabaseAnonKey);
+        request.Content = JsonContent.Create(new { refresh_token = credential.RefreshToken });
+        using var response = await _http.SendAsync(request, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException(ReadError(body, "A sessão expirou. Faça o pareamento novamente."));
+        var refreshed = JsonSerializer.Deserialize<RefreshResponse>(body, JsonOptions)
+                        ?? throw new InvalidOperationException("Resposta de renovação inválida.");
+        credential.AccessToken = refreshed.AccessToken;
+        credential.RefreshToken = string.IsNullOrWhiteSpace(refreshed.RefreshToken)
+            ? credential.RefreshToken
+            : refreshed.RefreshToken;
+        credential.ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(Math.Max(60, refreshed.ExpiresIn));
+        _credentials.Save(credential);
+        return credential;
     }
 
     private AppSettings RequireSettings()
@@ -161,6 +210,14 @@ public sealed class SupabaseDeviceClient
         [JsonPropertyName("restaurant_id")] public Guid RestaurantId { get; set; }
         [JsonPropertyName("restaurant_name")] public string RestaurantName { get; set; } = "";
         [JsonPropertyName("access_token")] public string AccessToken { get; set; } = "";
+        [JsonPropertyName("refresh_token")] public string RefreshToken { get; set; } = "";
+        [JsonPropertyName("expires_in")] public int ExpiresIn { get; set; } = 3600;
+    }
+
+    private sealed class RefreshResponse
+    {
+        [JsonPropertyName("access_token")] public string AccessToken { get; set; } = "";
+        [JsonPropertyName("refresh_token")] public string RefreshToken { get; set; } = "";
+        [JsonPropertyName("expires_in")] public int ExpiresIn { get; set; } = 3600;
     }
 }
-

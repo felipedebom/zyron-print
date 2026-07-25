@@ -6,6 +6,7 @@ public sealed class DeviceCredential
     public Guid RestaurantId { get; set; }
     public string RestaurantName { get; set; } = "";
     public string AccessToken { get; set; } = "";
+    public string RefreshToken { get; set; } = "";
+    public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset PairedAt { get; set; }
 }
-

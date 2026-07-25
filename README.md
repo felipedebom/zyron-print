@@ -29,8 +29,8 @@ O arquivo `installer\ZYRON Print.iss` gera o instalador com Inno Setup 6.
 5. Gere no painel da loja um código temporário e use **Parear computador**.
 6. Minimize o aplicativo; ele continuará perto do relógio.
 
-O SQL em `supabase\001_zyron_print_proposal.sql` é uma proposta e não foi aplicado. O pareamento remoto só funciona depois que esse desenho e a Edge Function forem aprovados e implantados.
+O desenho inicial permanece documentado em `supabase\001_zyron_print_proposal.sql`. A implementação oficial está no projeto ZYRON Delivery, na migração `20260725213000_zyron_print_devices.sql`, e usa a Edge Function `zyron-print-pair`.
 
 ## Estado atual
 
-A versão 0.1 implementa a base Windows, impressão RAW/ESC-POS, CP850, bandeja, autostart, configurações, logs, cliente de pareamento e worker da fila. A integração do Delivery continua intocada e o QZ Tray permanece funcionando.
+A versão 0.1 implementa a base Windows, impressão RAW/ESC-POS, CP850, bandeja, autostart, configurações, logs, pareamento seguro, renovação automática da sessão e worker da fila. O Delivery mantém o QZ Tray como modo de compatibilidade e permite selecionar o ZYRON Print por loja.

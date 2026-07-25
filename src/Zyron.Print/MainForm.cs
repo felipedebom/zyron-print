@@ -231,6 +231,8 @@ public sealed class MainForm : Form
                 RestaurantId = result.RestaurantId,
                 RestaurantName = result.RestaurantName,
                 AccessToken = result.AccessToken,
+                RefreshToken = result.RefreshToken,
+                ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(Math.Max(60, result.ExpiresIn)),
                 PairedAt = DateTimeOffset.UtcNow
             });
             _pairingCode.Clear();

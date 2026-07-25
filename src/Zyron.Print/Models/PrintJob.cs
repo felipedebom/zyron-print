@@ -17,7 +17,9 @@ public sealed record PairingResult(
     Guid DeviceId,
     Guid RestaurantId,
     string RestaurantName,
-    string AccessToken);
+    string AccessToken,
+    string RefreshToken,
+    int ExpiresIn);
 
 public enum ConnectionState
 {
@@ -28,4 +30,3 @@ public enum ConnectionState
 }
 
 public sealed record WorkerStatus(ConnectionState State, string Message);
-
