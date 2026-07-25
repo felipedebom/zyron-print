@@ -52,6 +52,13 @@ public static class EscPosReceiptBuilder
         Write(stream, BoldOn);
         WriteText(stream, $"PEDIDO #{Text(payload, "orderNumber", "SEM NÚMERO")}\n");
         Write(stream, BoldOff);
+        if (Option(payload, "orderInfo"))
+        {
+            OptionalLine(stream, payload, "dateTime", "Data: ");
+            OptionalLine(stream, payload, "source", "Origem: ");
+            OptionalLine(stream, payload, "fulfillmentType", "Tipo: ");
+            OptionalLine(stream, payload, "estimate", "Previsão: ");
+        }
         Write(stream, Left);
         Separator(stream, columns);
 
@@ -59,17 +66,24 @@ public static class EscPosReceiptBuilder
         WriteText(stream, "CLIENTE E ENTREGA\n");
         Write(stream, BoldOff);
         WriteText(stream, $"{Text(payload, "customerName", "Cliente")}\n");
-        OptionalLine(stream, payload, "customerPhone", "Telefone: ");
+        if (Option(payload, "customerPhone"))
+            OptionalLine(stream, payload, "customerPhone", "Telefone: ");
 
-        if (payload.TryGetProperty("address", out var address) && address.ValueKind == JsonValueKind.Object)
+        if (Option(payload, "deliveryAddress")
+            && payload.TryGetProperty("address", out var address)
+            && address.ValueKind == JsonValueKind.Object)
         {
             var street = Text(address, "street");
             var number = Text(address, "number");
-            if (!string.IsNullOrWhiteSpace(street)) WriteText(stream, $"{street}, {number}\n");
+            if (!string.IsNullOrWhiteSpace(street))
+                WriteText(stream, string.IsNullOrWhiteSpace(number) ? $"{street}\n" : $"{street}, {number}\n");
             OptionalLine(stream, address, "neighborhood", "Bairro: ");
             OptionalLine(stream, address, "complement", "Compl.: ");
-            OptionalLine(stream, address, "reference", "Ref.: ");
+            if (Option(payload, "deliveryReference"))
+                OptionalLine(stream, address, "reference", "Ref.: ");
         }
+        if (Option(payload, "deliveryNote"))
+            OptionalLine(stream, payload, "deliveryNote", "Obs.: ");
 
         Separator(stream, columns);
         Write(stream, BoldOn);
@@ -81,7 +95,13 @@ public static class EscPosReceiptBuilder
             {
                 var quantity = Number(item, "quantity", 1);
                 WriteText(stream, $"{quantity:0.##}x {Text(item, "name", "ITEM").ToUpperInvariant()}\n");
-                OptionalLine(stream, item, "note", "   OBS: ");
+                if (Option(payload, "itemDetails"))
+                    WriteMultiline(stream, Text(item, "details"), "   ");
+                if (Option(payload, "itemNotes"))
+                    OptionalLine(stream, item, "note", "   OBS: ");
+                if (Option(payload, "unitPrices") && item.TryGetProperty("unitPrice", out var unitPrice)
+                    && unitPrice.ValueKind != JsonValueKind.Null)
+                    WriteText(stream, Align("   Unitário:", Money(MoneyValue(item, "unitPrice", 0)), columns));
                 var total = MoneyValue(item, "total", MoneyValue(item, "totalAmount", 0));
                 if (total == 0)
                 {
@@ -94,14 +114,37 @@ public static class EscPosReceiptBuilder
         Separator(stream, columns);
         WriteText(stream, Align("Subtotal", Money(MoneyValue(payload, "subtotal", 0)), columns));
         var discount = MoneyValue(payload, "discountAmount", 0);
-        if (discount > 0) WriteText(stream, Align("Desconto", $"- {Money(discount)}", columns));
+        if (Option(payload, "discount") && discount > 0)
+        {
+            var coupon = Text(payload, "coupon");
+            WriteText(stream, Align(string.IsNullOrWhiteSpace(coupon) ? "Desconto" : $"Cupom {coupon}", $"- {Money(discount)}", columns));
+        }
         var delivery = MoneyValue(payload, "deliveryFee", 0);
-        if (delivery > 0) WriteText(stream, Align("Taxa de entrega", Money(delivery), columns));
+        if (Option(payload, "deliveryFee") && delivery > 0)
+            WriteText(stream, Align("Taxa de entrega", Money(delivery), columns));
         Write(stream, BoldOn);
         WriteText(stream, Align("TOTAL", Money(MoneyValue(payload, "total", 0)), columns));
         Write(stream, BoldOff);
         Separator(stream, columns);
-        OptionalLine(stream, payload, "orderNotes", "Obs. geral: ");
+        if (Option(payload, "payment")
+            && payload.TryGetProperty("payment", out var payment)
+            && payment.ValueKind == JsonValueKind.Object)
+        {
+            Write(stream, BoldOn);
+            WriteText(stream, "PAGAMENTO\n");
+            Write(stream, BoldOff);
+            OptionalLine(stream, payment, "method", "");
+            OptionalLine(stream, payment, "status", "");
+            OptionalLine(stream, payment, "received", "Valor recebido: ");
+            OptionalLine(stream, payment, "change", "Troco: ");
+            Separator(stream, columns);
+        }
+        if (Option(payload, "driver"))
+            OptionalLine(stream, payload, "driver", "Entregador: ");
+        if (Option(payload, "operationalNote"))
+            OptionalLine(stream, payload, "orderNotes", "Obs. geral: ");
+        if (Option(payload, "orderId"))
+            OptionalLine(stream, payload, "printId", "ID: ");
         WriteText(stream, "\n\n\n");
         if (cut) Write(stream, Cut);
         return stream.ToArray();
@@ -134,6 +177,22 @@ public static class EscPosReceiptBuilder
         return value;
     }
 
+    private static bool Option(JsonElement payload, string property, bool fallback = true)
+    {
+        if (!payload.TryGetProperty("receiptOptions", out var options)
+            || options.ValueKind != JsonValueKind.Object
+            || !options.TryGetProperty(property, out var value)
+            || value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            return fallback;
+        return value.GetBoolean();
+    }
+
+    private static void WriteMultiline(Stream stream, string value, string prefix)
+    {
+        foreach (var line in value.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            WriteText(stream, $"{prefix}{line}\n");
+    }
+
     private static string Money(decimal value) =>
         value.ToString("C", CultureInfo.GetCultureInfo("pt-BR"));
 
@@ -156,4 +215,3 @@ public static class EscPosReceiptBuilder
 
     private static void Write(Stream stream, byte[] bytes) => stream.Write(bytes, 0, bytes.Length);
 }
-
