@@ -58,19 +58,19 @@ public sealed class RawPrinterService
         _logger.Info($"Trabalho '{documentName}' enviado para '{printerName}' ({bytes.Length} bytes).");
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
     private sealed class DocInfo
     {
-        [MarshalAs(UnmanagedType.LPWStr)] public string DocumentName = "";
-        [MarshalAs(UnmanagedType.LPWStr)] public string? OutputFile;
-        [MarshalAs(UnmanagedType.LPWStr)] public string DataType = "RAW";
+        [MarshalAs(UnmanagedType.LPStr)] public string DocumentName = "";
+        [MarshalAs(UnmanagedType.LPStr)] public string? OutputFile;
+        [MarshalAs(UnmanagedType.LPStr)] public string DataType = "RAW";
     }
 
     [DllImport("winspool.drv", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern bool OpenPrinter(string printerName, out IntPtr printerHandle, IntPtr defaults);
     [DllImport("winspool.drv", SetLastError = true)] private static extern bool ClosePrinter(IntPtr printerHandle);
-    [DllImport("winspool.drv", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern int StartDocPrinter(IntPtr printerHandle, int level, [In] DocInfo document);
+    [DllImport("winspool.drv", EntryPoint = "StartDocPrinterA", SetLastError = true, CharSet = CharSet.Ansi)]
+    private static extern int StartDocPrinter(IntPtr printerHandle, int level, [In, MarshalAs(UnmanagedType.LPStruct)] DocInfo document);
     [DllImport("winspool.drv", SetLastError = true)] private static extern bool EndDocPrinter(IntPtr printerHandle);
     [DllImport("winspool.drv", SetLastError = true)] private static extern bool StartPagePrinter(IntPtr printerHandle);
     [DllImport("winspool.drv", SetLastError = true)] private static extern bool EndPagePrinter(IntPtr printerHandle);

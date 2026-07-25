@@ -1,5 +1,5 @@
 #define MyAppName "ZYRON Print"
-#define MyAppVersion "0.1.4"
+#define MyAppVersion "0.1.5"
 #define MyAppPublisher "ZYRON"
 #define MyAppExeName "ZYRON Print.exe"
 
