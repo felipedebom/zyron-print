@@ -32,6 +32,7 @@ public sealed class SettingsStore
 
     public void Save(AppSettings settings)
     {
+        ApplyServiceDefaults(settings);
         settings.PaperWidth = settings.PaperWidth == 80 ? 80 : 58;
         settings.PollIntervalSeconds = Math.Clamp(settings.PollIntervalSeconds, 2, 60);
         lock (_gate)
@@ -50,13 +51,23 @@ public sealed class SettingsStore
             {
                 return new AppSettings();
             }
-            return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(_paths.SettingsFile)) ?? new AppSettings();
+            var settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(_paths.SettingsFile)) ?? new AppSettings();
+            ApplyServiceDefaults(settings);
+            return settings;
         }
         catch (Exception exception)
         {
             _logger.Error("Não foi possível carregar as configurações.", exception);
             return new AppSettings();
         }
+    }
+
+    private static void ApplyServiceDefaults(AppSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.SupabaseUrl))
+            settings.SupabaseUrl = AppSettings.DefaultSupabaseUrl;
+        if (string.IsNullOrWhiteSpace(settings.SupabaseAnonKey))
+            settings.SupabaseAnonKey = AppSettings.DefaultSupabasePublishableKey;
     }
 
     private static AppSettings Clone(AppSettings value) => new()
@@ -70,4 +81,3 @@ public sealed class SettingsStore
         PollIntervalSeconds = value.PollIntervalSeconds
     };
 }
-

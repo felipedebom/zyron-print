@@ -25,9 +25,8 @@ O arquivo `installer\ZYRON Print.iss` gera o instalador com Inno Setup 6.
 1. Instale no Windows o driver da impressora térmica.
 2. Abra o ZYRON Print e escolha a impressora exibida pelo Windows.
 3. Escolha 58 mm ou 80 mm e clique em **Imprimir teste**.
-4. Informe a URL e a chave pública do projeto Supabase. Nunca informe `service_role`.
-5. Gere no painel da loja um código temporário e use **Parear computador**.
-6. Minimize o aplicativo; ele continuará perto do relógio.
+4. Gere no painel da loja um código temporário e use **Parear computador**.
+5. Minimize o aplicativo; ele continuará perto do relógio.
 
 O desenho inicial permanece documentado em `supabase\001_zyron_print_proposal.sql`. A implementação oficial está no projeto ZYRON Delivery, na migração `20260725213000_zyron_print_devices.sql`, e usa a Edge Function `zyron-print-pair`.
 

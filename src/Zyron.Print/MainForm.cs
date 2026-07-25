@@ -138,17 +138,6 @@ public sealed class MainForm : Form
             UpdatePairingView();
         };
 
-        var connectionContent = PageContent([
-            Row("URL do Supabase", _supabaseUrl),
-            Row("Chave pública", _anonKey),
-            new Label
-            {
-                Text = "A chave pública não é uma chave administrativa. Nunca use service_role neste aplicativo.",
-                AutoSize = true,
-                ForeColor = Color.DimGray
-            }
-        ]);
-
         var actions = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
         actions.Controls.Add(Button("Salvar configurações", (_, _) => SaveSettings(true)));
         actions.Controls.Add(Button("Abrir pasta de logs", (_, _) =>
@@ -158,7 +147,6 @@ public sealed class MainForm : Form
         var tabs = new TabControl { Dock = DockStyle.Fill, Padding = new Point(14, 6) };
         tabs.TabPages.Add(Tab("Impressora", printerContent));
         tabs.TabPages.Add(Tab("Pareamento", pairingContent));
-        tabs.TabPages.Add(Tab("Conexão", connectionContent));
 
         root.Controls.Add(title);
         root.Controls.Add(subtitle);
