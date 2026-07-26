@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>ZYRON Print</AssemblyName>
     <RootNamespace>Zyron.Print</RootNamespace>
-    <Version>0.1.6</Version>
+    <Version>0.1.7</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\zyron-print.ico</ApplicationIcon>
     <Platforms>AnyCPU;x64</Platforms>

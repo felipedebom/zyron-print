@@ -12,6 +12,8 @@ public static class EscPosReceiptBuilder
     private static readonly byte[] Left = [0x1B, 0x61, 0x00];
     private static readonly byte[] BoldOn = [0x1B, 0x45, 0x01];
     private static readonly byte[] BoldOff = [0x1B, 0x45, 0x00];
+    private static readonly byte[] InverseOn = [0x1D, 0x42, 0x01];
+    private static readonly byte[] InverseOff = [0x1D, 0x42, 0x00];
     private static readonly byte[] Cut = [0x1D, 0x56, 0x00];
 
     static EscPosReceiptBuilder()
@@ -26,17 +28,22 @@ public static class EscPosReceiptBuilder
         Write(stream, Initialize);
         Write(stream, CodePage850);
         Write(stream, Center);
-        WriteText(stream, $"{Clean(storeName)}\n");
+        WriteWrapped(stream, Clean(storeName), columns);
         Write(stream, BoldOn);
         WriteText(stream, "ZYRON PRINT\n");
         Write(stream, BoldOff);
         WriteText(stream, "IMPRESSÃO DE TESTE\n");
         Write(stream, Left);
         WriteText(stream, $"{new string('-', columns)}\n");
+        WriteQuantityAndName(stream, "2x", "X-BURGER ESPECIAL", columns);
+        WriteInverseFullLine(stream, "- Cebola", columns);
+        WriteInverseFullLine(stream, "OBS: Carne bem passada", columns);
+        WriteText(stream, Align("Total item:", "R$ 49,80", columns));
+        WriteInverseFullLine(stream, "Troco para: R$ 100,00", columns);
         WriteText(stream, "Acentos: á é í ó ú ã õ ç\n");
-        WriteText(stream, "Impressora configurada com sucesso.\n");
         WriteText(stream, Align("Papel", $"{paperWidth} mm", columns));
         WriteText(stream, $"{new string('-', columns)}\n\n\n");
+        Write(stream, InverseOff);
         if (cut) Write(stream, Cut);
         return stream.ToArray();
     }
@@ -48,16 +55,16 @@ public static class EscPosReceiptBuilder
         Write(stream, Initialize);
         Write(stream, CodePage850);
         Write(stream, Center);
-        WriteText(stream, $"{Text(payload, "storeName", "ZYRON Delivery")}\n");
+        WriteWrapped(stream, Text(payload, "storeName", "ZYRON Delivery"), columns);
         Write(stream, BoldOn);
-        WriteText(stream, $"PEDIDO #{Text(payload, "orderNumber", "SEM NÚMERO")}\n");
+        WriteWrapped(stream, $"PEDIDO #{Text(payload, "orderNumber", "SEM NÚMERO")}", columns);
         Write(stream, BoldOff);
         if (Option(payload, "orderInfo"))
         {
-            OptionalLine(stream, payload, "dateTime", "Data: ");
-            OptionalLine(stream, payload, "source", "Origem: ");
-            OptionalLine(stream, payload, "fulfillmentType", "Tipo: ");
-            OptionalLine(stream, payload, "estimate", "Previsão: ");
+            OptionalLine(stream, payload, "dateTime", "Data: ", columns);
+            OptionalLine(stream, payload, "source", "Origem: ", columns);
+            OptionalLine(stream, payload, "fulfillmentType", "Tipo: ", columns);
+            OptionalLine(stream, payload, "estimate", "Previsão: ", columns);
         }
         Write(stream, Left);
         Separator(stream, columns);
@@ -65,9 +72,9 @@ public static class EscPosReceiptBuilder
         Write(stream, BoldOn);
         WriteText(stream, "CLIENTE E ENTREGA\n");
         Write(stream, BoldOff);
-        WriteText(stream, $"{Text(payload, "customerName", "Cliente")}\n");
+        WriteWrapped(stream, Text(payload, "customerName", "Cliente"), columns);
         if (Option(payload, "customerPhone"))
-            OptionalLine(stream, payload, "customerPhone", "Telefone: ");
+            OptionalLine(stream, payload, "customerPhone", "Telefone: ", columns);
 
         if (Option(payload, "deliveryAddress")
             && payload.TryGetProperty("address", out var address)
@@ -76,14 +83,14 @@ public static class EscPosReceiptBuilder
             var street = Text(address, "street");
             var number = Text(address, "number");
             if (!string.IsNullOrWhiteSpace(street))
-                WriteText(stream, string.IsNullOrWhiteSpace(number) ? $"{street}\n" : $"{street}, {number}\n");
-            OptionalLine(stream, address, "neighborhood", "Bairro: ");
-            OptionalLine(stream, address, "complement", "Compl.: ");
+                WriteWrapped(stream, string.IsNullOrWhiteSpace(number) ? street : $"{street}, {number}", columns);
+            OptionalLine(stream, address, "neighborhood", "Bairro: ", columns);
+            OptionalLine(stream, address, "complement", "Compl.: ", columns);
             if (Option(payload, "deliveryReference"))
-                OptionalLine(stream, address, "reference", "Ref.: ");
+                OptionalLine(stream, address, "reference", "Ref.: ", columns);
         }
         if (Option(payload, "deliveryNote"))
-            OptionalLine(stream, payload, "deliveryNote", "Obs.: ");
+            OptionalLine(stream, payload, "deliveryNote", "Obs.: ", columns);
 
         Separator(stream, columns);
         Write(stream, BoldOn);
@@ -94,11 +101,19 @@ public static class EscPosReceiptBuilder
             foreach (var item in items.EnumerateArray())
             {
                 var quantity = Number(item, "quantity", 1);
-                WriteText(stream, $"{quantity:0.##}x {Text(item, "name", "ITEM").ToUpperInvariant()}\n");
+                WriteQuantityAndName(
+                    stream,
+                    $"{quantity:0.##}x",
+                    Text(item, "name", "ITEM").ToUpperInvariant(),
+                    columns);
                 if (Option(payload, "itemDetails"))
-                    WriteMultiline(stream, Text(item, "details"), "   ");
+                    WriteItemDetails(stream, Text(item, "details"), columns);
                 if (Option(payload, "itemNotes"))
-                    OptionalLine(stream, item, "note", "   OBS: ");
+                {
+                    var note = Text(item, "note");
+                    if (!string.IsNullOrWhiteSpace(note))
+                        WriteInverseFullLine(stream, $"OBS: {note}", columns);
+                }
                 if (Option(payload, "unitPrices") && item.TryGetProperty("unitPrice", out var unitPrice)
                     && unitPrice.ValueKind != JsonValueKind.Null)
                     WriteText(stream, Align("   Unitário:", Money(MoneyValue(item, "unitPrice", 0)), columns));
@@ -133,18 +148,24 @@ public static class EscPosReceiptBuilder
             Write(stream, BoldOn);
             WriteText(stream, "PAGAMENTO\n");
             Write(stream, BoldOff);
-            OptionalLine(stream, payment, "method", "");
-            OptionalLine(stream, payment, "status", "");
-            OptionalLine(stream, payment, "received", "Valor recebido: ");
-            OptionalLine(stream, payment, "change", "Troco: ");
+            OptionalLine(stream, payment, "method", "", columns);
+            OptionalLine(stream, payment, "status", "", columns);
+            OptionalLine(stream, payment, "received", "Valor recebido: ", columns);
+            var changeFor = Text(payment, "changeFor");
+            if (!string.IsNullOrWhiteSpace(changeFor))
+                WriteInverseFullLine(stream, $"Troco para: {changeFor}", columns);
+            var change = Text(payment, "change");
+            if (!string.IsNullOrWhiteSpace(change))
+                WriteInverseFullLine(stream, $"Troco: {change}", columns);
             Separator(stream, columns);
         }
         if (Option(payload, "driver"))
-            OptionalLine(stream, payload, "driver", "Entregador: ");
+            OptionalLine(stream, payload, "driver", "Entregador: ", columns);
         if (Option(payload, "operationalNote"))
-            OptionalLine(stream, payload, "orderNotes", "Obs. geral: ");
+            OptionalLine(stream, payload, "orderNotes", "Obs. geral: ", columns);
         if (Option(payload, "orderId"))
-            OptionalLine(stream, payload, "printId", "ID: ");
+            OptionalLine(stream, payload, "printId", "ID: ", columns);
+        Write(stream, InverseOff);
         WriteText(stream, "\n\n\n");
         if (cut) Write(stream, Cut);
         return stream.ToArray();
@@ -152,10 +173,10 @@ public static class EscPosReceiptBuilder
 
     public static int Columns(int paperWidth) => paperWidth == 80 ? 48 : 32;
 
-    private static void OptionalLine(Stream stream, JsonElement element, string property, string prefix)
+    private static void OptionalLine(Stream stream, JsonElement element, string property, string prefix, int columns)
     {
         var value = Text(element, property);
-        if (!string.IsNullOrWhiteSpace(value)) WriteText(stream, $"{prefix}{value}\n");
+        if (!string.IsNullOrWhiteSpace(value)) WriteWrapped(stream, $"{prefix}{value}", columns);
     }
 
     private static string Text(JsonElement element, string property, string fallback = "")
@@ -187,10 +208,92 @@ public static class EscPosReceiptBuilder
         return value.GetBoolean();
     }
 
-    private static void WriteMultiline(Stream stream, string value, string prefix)
+    private static void WriteQuantityAndName(Stream stream, string quantity, string name, int columns)
     {
-        foreach (var line in value.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            WriteText(stream, $"{prefix}{line}\n");
+        quantity = Clean(quantity);
+        var firstWidth = Math.Max(1, columns - quantity.Length - 1);
+        var nameLines = Wrap(name, firstWidth).ToList();
+        if (nameLines.Count == 0) nameLines.Add("ITEM");
+
+        Write(stream, InverseOn);
+        WriteText(stream, quantity);
+        Write(stream, InverseOff);
+        WriteText(stream, $" {nameLines[0]}\n");
+
+        var remaining = string.Join(" ", nameLines.Skip(1));
+        foreach (var line in Wrap(remaining, columns))
+            WriteText(stream, $"{line}\n");
+    }
+
+    private static void WriteItemDetails(Stream stream, string value, int columns)
+    {
+        foreach (var rawLine in value.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var line = Clean(rawLine).Trim();
+            if (IsRemoval(line))
+            {
+                WriteInverseFullLine(stream, line, columns);
+                continue;
+            }
+            foreach (var wrapped in Wrap(line, Math.Max(1, columns - 3)))
+                WriteText(stream, $"   {wrapped}\n");
+        }
+    }
+
+    private static bool IsRemoval(string value)
+    {
+        var normalized = value.TrimStart();
+        return normalized.StartsWith("-", StringComparison.Ordinal)
+               || normalized.StartsWith("SEM ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void WriteInverseFullLine(Stream stream, string value, int columns)
+    {
+        foreach (var line in Wrap(value, columns))
+        {
+            Write(stream, InverseOn);
+            WriteText(stream, line.PadRight(columns));
+            WriteText(stream, "\n");
+            Write(stream, InverseOff);
+        }
+    }
+
+    private static IEnumerable<string> Wrap(string value, int width)
+    {
+        value = Clean(value).Trim();
+        if (value.Length == 0) yield break;
+        width = Math.Max(1, width);
+
+        var current = "";
+        foreach (var word in value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (word.Length > width)
+            {
+                if (current.Length > 0)
+                {
+                    yield return current;
+                    current = "";
+                }
+                for (var index = 0; index < word.Length; index += width)
+                    yield return word.Substring(index, Math.Min(width, word.Length - index));
+                continue;
+            }
+
+            if (current.Length == 0)
+            {
+                current = word;
+            }
+            else if (current.Length + 1 + word.Length <= width)
+            {
+                current += $" {word}";
+            }
+            else
+            {
+                yield return current;
+                current = word;
+            }
+        }
+        if (current.Length > 0) yield return current;
     }
 
     private static string Money(decimal value) =>
@@ -200,6 +303,11 @@ public static class EscPosReceiptBuilder
     {
         label = Clean(label);
         value = Clean(value);
+        if (value.Length >= columns)
+            value = value[^Math.Max(1, columns - 1)..];
+        var maximumLabelLength = Math.Max(0, columns - value.Length - 1);
+        if (label.Length > maximumLabelLength)
+            label = label[..maximumLabelLength];
         var spaces = Math.Max(1, columns - label.Length - value.Length);
         return $"{label}{new string(' ', spaces)}{value}\n";
     }
@@ -209,6 +317,12 @@ public static class EscPosReceiptBuilder
 
     private static void Separator(Stream stream, int columns) =>
         WriteText(stream, $"{new string('-', columns)}\n");
+
+    private static void WriteWrapped(Stream stream, string value, int columns)
+    {
+        foreach (var line in Wrap(value, columns))
+            WriteText(stream, $"{line}\n");
+    }
 
     private static void WriteText(Stream stream, string text) =>
         Write(stream, Encoding.GetEncoding(850, EncoderFallback.ReplacementFallback, DecoderFallback.ReplacementFallback).GetBytes(text));
