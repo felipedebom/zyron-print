@@ -1,4 +1,7 @@
 using System.Globalization;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Text;
 using System.Text;
 using System.Text.Json;
 
@@ -54,6 +57,8 @@ public static class EscPosReceiptBuilder
         using var stream = new MemoryStream();
         Write(stream, Initialize);
         Write(stream, CodePage850);
+        if (Option(payload, "zyronBranding", false))
+            WriteZyronBranding(stream, payload, paperWidth, columns);
         Write(stream, Center);
         WriteWrapped(stream, Text(payload, "storeName", "ZYRON Delivery"), columns);
         Write(stream, BoldOn);
@@ -172,6 +177,103 @@ public static class EscPosReceiptBuilder
     }
 
     public static int Columns(int paperWidth) => paperWidth == 80 ? 48 : 32;
+
+    private static void WriteZyronBranding(Stream stream, JsonElement payload, int paperWidth, int columns)
+    {
+        var tagline = BrandingText(payload, "tagline", "Sistema de delivery");
+        var website = BrandingText(payload, "website", "delivery.zyrondigital.com.br");
+        try
+        {
+            Write(stream, BuildZyronRaster(paperWidth, tagline, website));
+            Write(stream, Left);
+            Separator(stream, columns);
+        }
+        catch
+        {
+            Write(stream, Center);
+            Write(stream, BoldOn);
+            WriteText(stream, "ZYRON\n");
+            Write(stream, BoldOff);
+            WriteWrapped(stream, tagline, columns);
+            WriteWrapped(stream, website, columns);
+            Write(stream, Left);
+            Separator(stream, columns);
+        }
+    }
+
+    private static string BrandingText(JsonElement payload, string property, string fallback)
+    {
+        if (payload.TryGetProperty("zyronBranding", out var branding)
+            && branding.ValueKind == JsonValueKind.Object)
+            return Text(branding, property, fallback);
+        return fallback;
+    }
+
+    internal static byte[] BuildZyronRaster(int paperWidth, string tagline, string website)
+    {
+        var width = paperWidth == 80 ? 576 : 384;
+        var scale = paperWidth == 80 ? 1.35f : 1f;
+        var height = (int)Math.Ceiling(142 * scale);
+        using var bitmap = new Bitmap(width, height);
+        using var graphics = Graphics.FromImage(bitmap);
+        graphics.Clear(Color.White);
+        graphics.SmoothingMode = SmoothingMode.HighQuality;
+        graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        graphics.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+
+        var centerX = width / 2f;
+        var markSize = 62 * scale;
+        var markLeft = centerX - markSize / 2;
+        using var markPen = new Pen(Color.Black, Math.Max(4, 5 * scale));
+        graphics.DrawArc(markPen, markLeft, 3 * scale, markSize, markSize, 35, 285);
+        using var markFont = new Font("Arial Black", 39 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
+        DrawCentered(graphics, "Z", markFont, 5 * scale, width);
+
+        using var nameFont = new Font("Arial Black", 25 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
+        DrawCentered(graphics, "ZYRON", nameFont, 60 * scale, width);
+        using var taglineFont = new Font("Arial", 10 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
+        DrawCentered(graphics, Clean(tagline).ToUpperInvariant(), taglineFont, 94 * scale, width);
+        using var siteFont = new Font("Arial", 9 * scale, FontStyle.Regular, GraphicsUnit.Pixel);
+        DrawCentered(graphics, Clean(website), siteFont, 113 * scale, width);
+
+        return ToEscPosRaster(bitmap);
+    }
+
+    private static void DrawCentered(Graphics graphics, string text, Font font, float y, int width)
+    {
+        var size = graphics.MeasureString(text, font);
+        graphics.DrawString(text, font, Brushes.Black, Math.Max(0, (width - size.Width) / 2), y);
+    }
+
+    private static byte[] ToEscPosRaster(Bitmap bitmap)
+    {
+        var widthBytes = (bitmap.Width + 7) / 8;
+        using var stream = new MemoryStream();
+        Write(stream,
+        [
+            0x1D, 0x76, 0x30, 0x00,
+            (byte)(widthBytes & 0xFF), (byte)((widthBytes >> 8) & 0xFF),
+            (byte)(bitmap.Height & 0xFF), (byte)((bitmap.Height >> 8) & 0xFF)
+        ]);
+        for (var y = 0; y < bitmap.Height; y++)
+        {
+            for (var byteIndex = 0; byteIndex < widthBytes; byteIndex++)
+            {
+                byte value = 0;
+                for (var bit = 0; bit < 8; bit++)
+                {
+                    var x = byteIndex * 8 + bit;
+                    if (x >= bitmap.Width) continue;
+                    var color = bitmap.GetPixel(x, y);
+                    var luminance = (color.R * 299 + color.G * 587 + color.B * 114) / 1000;
+                    if (luminance < 170) value |= (byte)(0x80 >> bit);
+                }
+                stream.WriteByte(value);
+            }
+        }
+        WriteText(stream, "\n");
+        return stream.ToArray();
+    }
 
     private static void OptionalLine(Stream stream, JsonElement element, string property, string prefix, int columns)
     {

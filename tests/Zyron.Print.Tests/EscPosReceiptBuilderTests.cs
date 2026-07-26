@@ -101,6 +101,61 @@ public sealed class EscPosReceiptBuilderTests
         Assert.DoesNotContain("PAGAMENTO", text);
     }
 
+    [Theory]
+    [InlineData(58, 48, 384)]
+    [InlineData(80, 72, 576)]
+    public void BuildFromPayload_AddsFullWidthZyronRasterWhenBrandingIsEnabled(
+        int paperWidth, int expectedWidthBytes, int expectedPixelWidth)
+    {
+        using var json = JsonDocument.Parse("""
+        {
+          "storeName": "Brasa 47 Burger",
+          "orderNumber": "123",
+          "customerName": "Mariana",
+          "items": [],
+          "subtotal": 0,
+          "total": 0,
+          "receiptOptions": { "zyronBranding": true },
+          "zyronBranding": {
+            "tagline": "Sistema de delivery",
+            "website": "delivery.zyrondigital.com.br"
+          }
+        }
+        """);
+
+        var result = EscPosReceiptBuilder.BuildFromPayload(json.RootElement, paperWidth, false);
+        var commandOffset = FindRasterCommand(result);
+
+        Assert.True(commandOffset >= 0);
+        Assert.Equal(expectedWidthBytes, result[commandOffset + 4] | result[commandOffset + 5] << 8);
+        Assert.Equal(expectedPixelWidth, expectedWidthBytes * 8);
+        var height = result[commandOffset + 6] | result[commandOffset + 7] << 8;
+        Assert.True(height > 100);
+        var raster = result.AsSpan(commandOffset + 8, expectedWidthBytes * height);
+        var blackPixels = raster.ToArray().Sum(value => System.Numerics.BitOperations.PopCount(value));
+        Assert.InRange(blackPixels, expectedPixelWidth * 3, expectedPixelWidth * height / 2);
+    }
+
+    [Fact]
+    public void BuildFromPayload_DoesNotAddRasterWhenBrandingIsDisabled()
+    {
+        using var json = JsonDocument.Parse("""
+        {
+          "storeName": "Loja",
+          "orderNumber": "123",
+          "customerName": "Cliente",
+          "items": [],
+          "subtotal": 0,
+          "total": 0,
+          "receiptOptions": { "zyronBranding": false }
+        }
+        """);
+
+        var result = EscPosReceiptBuilder.BuildFromPayload(json.RootElement, 58, false);
+
+        Assert.Equal(-1, FindRasterCommand(result));
+    }
+
     [Fact]
     public void BuildTest_DemonstratesFourBalancedInverseHighlights()
     {
@@ -200,6 +255,17 @@ public sealed class EscPosReceiptBuilderTests
                 commands.Add((index, bytes[index + 2] == 0x01));
         }
         return commands;
+    }
+
+    private static int FindRasterCommand(byte[] bytes)
+    {
+        for (var index = 0; index <= bytes.Length - 8; index++)
+        {
+            if (bytes[index] == 0x1D && bytes[index + 1] == 0x76
+                && bytes[index + 2] == 0x30 && bytes[index + 3] == 0x00)
+                return index;
+        }
+        return -1;
     }
 
     private static void AssertAlternatesUntilFinalSafetyOff(List<(int Offset, bool Enabled)> commands)
