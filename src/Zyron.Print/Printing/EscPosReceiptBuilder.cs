@@ -213,7 +213,7 @@ public static class EscPosReceiptBuilder
     {
         var width = paperWidth == 80 ? 576 : 384;
         var scale = paperWidth == 80 ? 1.35f : 1f;
-        var height = (int)Math.Ceiling(142 * scale);
+        var height = (int)Math.Ceiling(162 * scale);
         using var bitmap = new Bitmap(width, height);
         using var graphics = Graphics.FromImage(bitmap);
         graphics.Clear(Color.White);
@@ -231,10 +231,10 @@ public static class EscPosReceiptBuilder
 
         using var nameFont = new Font("Arial Black", 25 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
         DrawCentered(graphics, "ZYRON", nameFont, 60 * scale, width);
-        using var taglineFont = new Font("Arial", 10 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
-        DrawCentered(graphics, Clean(tagline).ToUpperInvariant(), taglineFont, 94 * scale, width);
-        using var siteFont = new Font("Arial", 9 * scale, FontStyle.Regular, GraphicsUnit.Pixel);
-        DrawCentered(graphics, Clean(website), siteFont, 113 * scale, width);
+        using var taglineFont = new Font("Arial", 15 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
+        DrawCentered(graphics, Clean(tagline).ToUpperInvariant(), taglineFont, 98 * scale, width);
+        using var siteFont = new Font("Arial", 15 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
+        DrawCentered(graphics, Clean(website), siteFont, 126 * scale, width);
 
         return ToEscPosRaster(bitmap);
     }
@@ -266,7 +266,7 @@ public static class EscPosReceiptBuilder
                     if (x >= bitmap.Width) continue;
                     var color = bitmap.GetPixel(x, y);
                     var luminance = (color.R * 299 + color.G * 587 + color.B * 114) / 1000;
-                    if (luminance < 170) value |= (byte)(0x80 >> bit);
+                    if (luminance < 205) value |= (byte)(0x80 >> bit);
                 }
                 stream.WriteByte(value);
             }
