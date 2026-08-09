@@ -189,6 +189,7 @@ public sealed class EscPosReceiptBuilderTests
           "total": 49.80,
           "payment": {
             "method": "Dinheiro",
+            "status": "PAGAR NA ENTREGA",
             "received": 100.00,
             "change": 50.20
           }
@@ -207,6 +208,7 @@ public sealed class EscPosReceiptBuilderTests
         Assert.Contains("   + Bacon\n   + Queijo extra\n", text);
         Assert.Contains("OBS: Carne bem passada", text);
         Assert.Contains("Origem: ZYRON", text);
+        Assert.DoesNotContain("PAGAR NA ENTREGA", text);
         Assert.Contains("Valor recebido: R$ 100,00", text);
         Assert.Contains("Troco: R$ 50,20", text);
         Assert.True(commands[^1].Offset < result.Length - 3);

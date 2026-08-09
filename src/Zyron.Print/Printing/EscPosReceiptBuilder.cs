@@ -161,7 +161,6 @@ public static class EscPosReceiptBuilder
             WriteText(stream, "PAGAMENTO\n");
             Write(stream, BoldOff);
             OptionalLine(stream, payment, "method", "", columns);
-            OptionalLine(stream, payment, "status", "", columns);
             var received = PaymentMoney(payment, "received");
             if (!string.IsNullOrWhiteSpace(received))
                 WriteWrapped(stream, $"Valor recebido: {received}", columns);
