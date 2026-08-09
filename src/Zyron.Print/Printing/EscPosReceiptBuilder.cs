@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Drawing.Text;
 using System.Text;
 using System.Text.Json;
 
@@ -9,6 +8,9 @@ namespace Zyron.Print.Printing;
 
 public static class EscPosReceiptBuilder
 {
+    private const string DefaultBrandTagline = "DELIVERY • PEDIDOS • GESTÃO";
+    private const string LegacyBrandTagline = "Sistema de delivery";
+    private const string DefaultBrandWebsite = "delivery.zyrondigital.com.br";
     private static readonly byte[] Initialize = [0x1B, 0x40];
     private static readonly byte[] CodePage850 = [0x1B, 0x74, 0x02];
     private static readonly byte[] Center = [0x1B, 0x61, 0x01];
@@ -30,12 +32,14 @@ public static class EscPosReceiptBuilder
         using var stream = new MemoryStream();
         Write(stream, Initialize);
         Write(stream, CodePage850);
+        Write(stream, BuildZyronRaster(paperWidth, DefaultBrandTagline, DefaultBrandWebsite));
+        Write(stream, Left);
+        Separator(stream, columns);
         Write(stream, Center);
         WriteWrapped(stream, Clean(storeName), columns);
         Write(stream, BoldOn);
-        WriteText(stream, "ZYRON PRINT\n");
-        Write(stream, BoldOff);
         WriteText(stream, "IMPRESSÃO DE TESTE\n");
+        Write(stream, BoldOff);
         Write(stream, Left);
         WriteText(stream, $"{new string('-', columns)}\n");
         WriteQuantityAndName(stream, "2x", "X-BURGER ESPECIAL", columns);
@@ -180,8 +184,8 @@ public static class EscPosReceiptBuilder
 
     private static void WriteZyronBranding(Stream stream, JsonElement payload, int paperWidth, int columns)
     {
-        var tagline = BrandingText(payload, "tagline", "Sistema de delivery");
-        var website = BrandingText(payload, "website", "delivery.zyrondigital.com.br");
+        var tagline = NormalizeBrandingTagline(BrandingText(payload, "tagline", DefaultBrandTagline));
+        var website = BrandingText(payload, "website", DefaultBrandWebsite);
         try
         {
             Write(stream, BuildZyronRaster(paperWidth, tagline, website));
@@ -209,40 +213,38 @@ public static class EscPosReceiptBuilder
         return fallback;
     }
 
+    private static string NormalizeBrandingTagline(string tagline) =>
+        string.IsNullOrWhiteSpace(tagline)
+        || tagline.Equals(LegacyBrandTagline, StringComparison.OrdinalIgnoreCase)
+            ? DefaultBrandTagline
+            : tagline;
+
     internal static byte[] BuildZyronRaster(int paperWidth, string tagline, string website)
     {
+        _ = tagline;
+        _ = website;
+
+        const string resourceName = "Zyron.Print.Assets.zyron-receipt-logo.png";
+        using var logoStream = typeof(EscPosReceiptBuilder).Assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"Recurso de marca não encontrado: {resourceName}");
+        using var logo = new Bitmap(logoStream);
+
         var width = paperWidth == 80 ? 576 : 384;
-        var scale = paperWidth == 80 ? 1.35f : 1f;
-        var height = (int)Math.Ceiling(162 * scale);
-        using var bitmap = new Bitmap(width, height);
+        var horizontalMargin = paperWidth == 80 ? 18 : 12;
+        var verticalMargin = paperWidth == 80 ? 6 : 4;
+        var drawWidth = width - (horizontalMargin * 2);
+        var drawHeight = (int)Math.Round(drawWidth * (logo.Height / (float)logo.Width));
+        using var bitmap = new Bitmap(width, drawHeight + (verticalMargin * 2));
         using var graphics = Graphics.FromImage(bitmap);
         graphics.Clear(Color.White);
         graphics.SmoothingMode = SmoothingMode.HighQuality;
         graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-        graphics.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-
-        var centerX = width / 2f;
-        var markSize = 62 * scale;
-        var markLeft = centerX - markSize / 2;
-        using var markPen = new Pen(Color.Black, Math.Max(4, 5 * scale));
-        graphics.DrawArc(markPen, markLeft, 3 * scale, markSize, markSize, 35, 285);
-        using var markFont = new Font("Arial Black", 39 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
-        DrawCentered(graphics, "Z", markFont, 5 * scale, width);
-
-        using var nameFont = new Font("Arial Black", 25 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
-        DrawCentered(graphics, "ZYRON", nameFont, 60 * scale, width);
-        using var taglineFont = new Font("Arial", 15 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
-        DrawCentered(graphics, Clean(tagline).ToUpperInvariant(), taglineFont, 98 * scale, width);
-        using var siteFont = new Font("Arial", 15 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
-        DrawCentered(graphics, Clean(website), siteFont, 126 * scale, width);
+        graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        graphics.DrawImage(
+            logo,
+            new Rectangle(horizontalMargin, verticalMargin, drawWidth, drawHeight));
 
         return ToEscPosRaster(bitmap);
-    }
-
-    private static void DrawCentered(Graphics graphics, string text, Font font, float y, int width)
-    {
-        var size = graphics.MeasureString(text, font);
-        graphics.DrawString(text, font, Brushes.Black, Math.Max(0, (width - size.Width) / 2), y);
     }
 
     private static byte[] ToEscPosRaster(Bitmap bitmap)

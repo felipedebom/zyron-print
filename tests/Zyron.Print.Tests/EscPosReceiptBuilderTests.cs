@@ -27,6 +27,7 @@ public sealed class EscPosReceiptBuilderTests
         var text = Encoding.GetEncoding(850).GetString(result);
 
         Assert.Contains("Coração", text);
+        Assert.True(FindRasterCommand(result) >= 0);
         Assert.True(result.TakeLast(3).SequenceEqual(new byte[] { 0x1D, 0x56, 0x00 }));
     }
 
@@ -117,7 +118,7 @@ public sealed class EscPosReceiptBuilderTests
           "total": 0,
           "receiptOptions": { "zyronBranding": true },
           "zyronBranding": {
-            "tagline": "Sistema de delivery",
+            "tagline": "DELIVERY • PEDIDOS • GESTÃO",
             "website": "delivery.zyrondigital.com.br"
           }
         }
