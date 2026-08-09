@@ -176,6 +176,7 @@ public sealed class EscPosReceiptBuilderTests
         {
           "storeName": "Loja",
           "orderNumber": "321",
+          "source": "SITE",
           "customerName": "Maria",
           "items": [{
             "quantity": 2,
@@ -188,8 +189,8 @@ public sealed class EscPosReceiptBuilderTests
           "total": 49.80,
           "payment": {
             "method": "Dinheiro",
-            "received": "R$ 100,00",
-            "change": "R$ 50,20"
+            "received": 100.00,
+            "change": 50.20
           }
         }
         """);
@@ -204,6 +205,8 @@ public sealed class EscPosReceiptBuilderTests
         Assert.Contains("- Cebola", text);
         Assert.Contains("SEM PICLES", text);
         Assert.Contains("OBS: Carne bem passada", text);
+        Assert.Contains("Origem: ZYRON", text);
+        Assert.Contains("Valor recebido: R$ 100,00", text);
         Assert.Contains("Troco: R$ 50,20", text);
         Assert.True(commands[^1].Offset < result.Length - 3);
         Assert.True(result.TakeLast(3).SequenceEqual(new byte[] { 0x1D, 0x56, 0x00 }));

@@ -71,7 +71,9 @@ public static class EscPosReceiptBuilder
         if (Option(payload, "orderInfo"))
         {
             OptionalLine(stream, payload, "dateTime", "Data: ", columns);
-            OptionalLine(stream, payload, "source", "Origem: ", columns);
+            var source = ReceiptSource(payload);
+            if (!string.IsNullOrWhiteSpace(source))
+                WriteWrapped(stream, $"Origem: {source}", columns);
             OptionalLine(stream, payload, "fulfillmentType", "Tipo: ", columns);
             OptionalLine(stream, payload, "estimate", "Previsão: ", columns);
         }
@@ -159,11 +161,13 @@ public static class EscPosReceiptBuilder
             Write(stream, BoldOff);
             OptionalLine(stream, payment, "method", "", columns);
             OptionalLine(stream, payment, "status", "", columns);
-            OptionalLine(stream, payment, "received", "Valor recebido: ", columns);
-            var changeFor = Text(payment, "changeFor");
+            var received = PaymentMoney(payment, "received");
+            if (!string.IsNullOrWhiteSpace(received))
+                WriteWrapped(stream, $"Valor recebido: {received}", columns);
+            var changeFor = PaymentMoney(payment, "changeFor");
             if (!string.IsNullOrWhiteSpace(changeFor))
                 WriteInverseFullLine(stream, $"Troco para: {changeFor}", columns);
-            var change = Text(payment, "change");
+            var change = PaymentMoney(payment, "change");
             if (!string.IsNullOrWhiteSpace(change))
                 WriteInverseFullLine(stream, $"Troco: {change}", columns);
             Separator(stream, columns);
@@ -300,6 +304,37 @@ public static class EscPosReceiptBuilder
     {
         var value = Number(element, property, fallback);
         return value;
+    }
+
+    private static string ReceiptSource(JsonElement payload)
+    {
+        var source = Text(payload, "source");
+        return source.Equals("SITE", StringComparison.OrdinalIgnoreCase)
+               || source.Equals("MENU", StringComparison.OrdinalIgnoreCase)
+            ? "ZYRON"
+            : source.ToUpperInvariant();
+    }
+
+    private static string PaymentMoney(JsonElement element, string property)
+    {
+        if (!element.TryGetProperty(property, out var value)
+            || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return "";
+
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var numericValue))
+            return Money(numericValue);
+
+        var text = Clean(value.ValueKind == JsonValueKind.String ? value.GetString() : value.ToString())
+            .Replace("R$", "", StringComparison.OrdinalIgnoreCase)
+            .Trim();
+        if (string.IsNullOrWhiteSpace(text)) return "";
+
+        var culture = text.Contains(',')
+            ? CultureInfo.GetCultureInfo("pt-BR")
+            : CultureInfo.InvariantCulture;
+        return decimal.TryParse(text, NumberStyles.Number, culture, out var parsed)
+            ? Money(parsed)
+            : $"R$ {text.Replace('.', ',')}";
     }
 
     private static bool Option(JsonElement payload, string property, bool fallback = true)
