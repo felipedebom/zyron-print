@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Zyron.Print.Printing;
 
@@ -235,7 +236,7 @@ public static class EscPosReceiptBuilder
 
         var width = paperWidth == 80 ? 576 : 384;
         var horizontalMargin = paperWidth == 80 ? 18 : 12;
-        var verticalMargin = paperWidth == 80 ? 6 : 4;
+        const int verticalMargin = 0;
         var drawWidth = width - (horizontalMargin * 2);
         var drawHeight = (int)Math.Round(drawWidth * (logo.Height / (float)logo.Width));
         using var bitmap = new Bitmap(width, drawHeight + (verticalMargin * 2));
@@ -368,16 +369,24 @@ public static class EscPosReceiptBuilder
     {
         foreach (var rawLine in value.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            var line = Clean(rawLine).Trim();
-            if (IsRemoval(line))
+            var cleanedLine = Clean(rawLine).Trim();
+            foreach (var line in SplitItemDetails(cleanedLine))
             {
-                WriteInverseFullLine(stream, line, columns);
-                continue;
+                if (IsRemoval(line))
+                {
+                    WriteInverseFullLine(stream, line, columns);
+                    continue;
+                }
+                foreach (var wrapped in Wrap(line, Math.Max(1, columns - 3)))
+                    WriteText(stream, $"   {wrapped}\n");
             }
-            foreach (var wrapped in Wrap(line, Math.Max(1, columns - 3)))
-                WriteText(stream, $"   {wrapped}\n");
         }
     }
+
+    private static IEnumerable<string> SplitItemDetails(string value) =>
+        Regex.Split(value, @"(?=[+-]\s)")
+            .Select(part => part.Trim())
+            .Where(part => part.Length > 0);
 
     private static bool IsRemoval(string value)
     {

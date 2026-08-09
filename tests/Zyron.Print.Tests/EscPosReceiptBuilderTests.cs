@@ -181,7 +181,7 @@ public sealed class EscPosReceiptBuilderTests
           "items": [{
             "quantity": 2,
             "name": "X-Burger Especial",
-            "details": "+ Bacon\n- Cebola\nSEM PICLES",
+            "details": "+ Bacon+ Queijo extra\n- Cebola\nSEM PICLES",
             "note": "Carne bem passada",
             "total": 49.80
           }],
@@ -204,6 +204,7 @@ public sealed class EscPosReceiptBuilderTests
         Assert.Contains("2x", TextBetween(result, commands[0].Offset + 3, commands[1].Offset));
         Assert.Contains("- Cebola", text);
         Assert.Contains("SEM PICLES", text);
+        Assert.Contains("   + Bacon\n   + Queijo extra\n", text);
         Assert.Contains("OBS: Carne bem passada", text);
         Assert.Contains("Origem: ZYRON", text);
         Assert.Contains("Valor recebido: R$ 100,00", text);
