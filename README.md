@@ -20,6 +20,19 @@ dotnet publish .\src\Zyron.Print\Zyron.Print.csproj -c Release -r win-x64 --self
 
 O arquivo `installer\ZYRON Print.iss` gera o instalador com Inno Setup 6.
 
+## Atualizacao automatica
+
+A partir da versao 0.1.13, o instalador inicial pode continuar hospedado no Google Drive. Depois da primeira instalacao, o aplicativo consulta as versoes publicadas em `https://github.com/felipedebom/zyron-print/releases` ao iniciar. Quando encontra uma versao estavel mais nova, baixa, aplica e reinicia automaticamente. Se a consulta falhar, a impressao inicia normalmente.
+
+Para gerar os pacotes de uma nova versao com Velopack:
+
+```powershell
+dotnet publish .\src\Zyron.Print\Zyron.Print.csproj -c Release -r win-x64 --self-contained true -o .\artifacts\publish-velopack
+vpk pack --packId Zyron.Print --packVersion 0.1.13 --packDir .\artifacts\publish-velopack --mainExe "ZYRON Print.exe" --outputDir .\artifacts\releases
+```
+
+O arquivo `Setup.exe` gerado e os pacotes do diretório de releases devem ser anexados à versão correspondente no GitHub Releases. Usuários da 0.1.12 precisam instalar a 0.1.13 manualmente uma única vez; as versões seguintes passam a ser automáticas.
+
 ## Configuração simples
 
 1. Instale no Windows o driver da impressora térmica.

@@ -32,6 +32,7 @@ public sealed class MainForm : Form
     private readonly Button _unpairButton = new() { Text = "Desvincular", AutoSize = true };
     private readonly Button _testButton = new() { Text = "Imprimir teste", AutoSize = true };
     private readonly NotifyIcon _tray = new() { Text = "ZYRON Print", Visible = true };
+    private readonly AutoUpdateService _autoUpdater;
     private bool _allowClose;
 
     public MainForm(
@@ -40,6 +41,7 @@ public sealed class MainForm : Form
         RawPrinterService printer,
         SupabaseDeviceClient api,
         PrintQueueWorker worker,
+        AutoUpdateService autoUpdater,
         StartupManager startup,
         FileLogger logger,
         bool startMinimized)
@@ -49,6 +51,7 @@ public sealed class MainForm : Form
         _printer = printer;
         _api = api;
         _worker = worker;
+        _autoUpdater = autoUpdater;
         _startup = startup;
         _logger = logger;
         _startMinimized = startMinimized;
@@ -303,8 +306,13 @@ public sealed class MainForm : Form
         _tray.Text = $"ZYRON Print - {status.Message}"[..Math.Min(63, $"ZYRON Print - {status.Message}".Length)];
     }
 
-    private void OnShown(object? sender, EventArgs eventArgs)
+    private async void OnShown(object? sender, EventArgs eventArgs)
     {
+        if (await _autoUpdater.InstallAvailableUpdateAsync())
+        {
+            return;
+        }
+
         _worker.Start();
         if (_startMinimized) HideToTray();
     }
